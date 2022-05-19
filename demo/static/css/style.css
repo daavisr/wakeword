@@ -59,8 +59,8 @@
 	font-weight: bold;
 }
 
-#examples {
-	padding-top: 15px;	
+.collapse {
+	margin-top: 15px;	
 }
 
 .loader {
