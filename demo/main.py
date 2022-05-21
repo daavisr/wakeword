@@ -23,18 +23,24 @@ sys.path.append("./multilingual_kws/")
 from multilingual_kws.embedding import transfer_learning, input_data
 
 settings = None
+silence_threshold = 20 / 32767    
+sample_rate=16000
 models = {
     "LV": tf.keras.models.load_model('models/TildePls_lv_4568shot'),
-    "LT": tf.keras.models.load_model('models/TildePls_lt_2022shot'),
-    "ET": tf.keras.models.load_model('models/TildePls_et_2022shot'),
-    "EN": tf.keras.models.load_model('models/TildePls_en_2100shot'),
-    "RU": tf.keras.models.load_model('models/TildePls_ru_2100shot'),
-    "LV_small": tf.keras.models.load_model('models/TildePls_lv_4568shot_distilled')
+    "LT": tf.keras.models.load_model('models/TildePls_lt_4044shot'),
+    "ET": tf.keras.models.load_model('models/TildePls_et_4044shot'),
+    "EN": tf.keras.models.load_model('models/TildePls_en_4200shot'),
+    "RU": tf.keras.models.load_model('models/TildePls_ru_4200shot'),
+    "LV_small": tf.keras.models.load_model('models/TildePls_lv_4568shot_distilled'),
+    "LT_small": tf.keras.models.load_model('models/TildePls_lt_4044shot_distilled'),
+    "ET_small": tf.keras.models.load_model('models/TildePls_et_4044shot_distilled'),
+    "EN_small": tf.keras.models.load_model('models/TildePls_en_4200shot_distilled'),
+    "RU_small": tf.keras.models.load_model('models/TildePls_ru_4200shot_distilled')
 }  
 
 class Application(tornado.web.Application):  #setting a tornado class as a web application
     def __init__(self):
-        handlers = [(r"/", MainHandler), (r"/websocket", WakeWordSocketHandler), (r"/loadmodels", LoadModelsHandler)] #setting the nesassary urls
+        handlers = [(r"/", MainHandler), (r"/websocket", WakeWordSocketHandler)] #setting the nesassary urls
         settings = dict(
             cookie_secret="szLzTfFYkh7bm)9L@NpnRgLpdE!KHC",
             template_path=os.path.join(os.path.dirname(__file__), "templates"),  #providing the templates path
@@ -48,9 +54,6 @@ class MainHandler(tornado.web.RequestHandler):
     def get(self):
         self.render("index.html")
 
-class LoadModelsHandler(tornado.web.RequestHandler):
-    def get(self):
-        logging.info(len(models))
 
 class WakeWordSocketHandler(tornado.websocket.WebSocketHandler):  #creating our main websocket class
 
@@ -61,12 +64,8 @@ class WakeWordSocketHandler(tornado.websocket.WebSocketHandler):  #creating our 
         return model.predict(np.array([x]))
 
     def on_message(self, message):
-        silence_threshold = 20 / 32767    
-        sample_rate=16000
-        
         obj = json.loads(message)        
         audio_bytes = bytes(obj["audio"])
-        #audio, message_sample_rate = tf.audio.decode_wav(message, desired_channels=1, desired_samples=44100)
         audio, message_sample_rate = sf.read(io.BytesIO(audio_bytes))
         if np.abs(audio).mean() < silence_threshold:
             logging.info("Signal too quiet")
@@ -75,8 +74,6 @@ class WakeWordSocketHandler(tornado.websocket.WebSocketHandler):  #creating our 
             if message_sample_rate != sample_rate:
                 samples = round(len(audio) * float(sample_rate) / message_sample_rate)
                 audio = sps.resample(audio, samples)
-            #fname = f"output/audio_{''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))}.wav"
-            #write(fname, 16000, np.array(audio).astype(np.float32))
             
             spectrogram = self.get_spectrogram(audio)
             predictions = self.detect_triggerword_spectrum(models[obj["model"]], spectrogram)
